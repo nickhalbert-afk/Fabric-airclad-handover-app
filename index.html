@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>FABRIC — Airclad Structure Inspection</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --bg:#EDE8DE;
+    --surface:#FFFFFF;
+    --surface-2:#F5F0E6;
+    --hair:#DBD4C5;
+    --text:#141311;
+    --text-dim:#57534A;
+    --text-faint:#8C8577;
+    --accent:#141311;
+    --accent-dim:#E7E2D5;
+    --critical:#B84438;
+    --major:#A8792A;
+    --minor:#8C8730;
+    --closed:#4D7A57;
+    --radius:10px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding-top:env(safe-area-inset-top);
+    padding-bottom:env(safe-area-inset-bottom);
+    overflow-x:hidden;
+  }
+  .display{font-family:'Archivo',sans-serif; text-transform:uppercase; letter-spacing:0.02em;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  #app{max-width:560px; margin:0 auto; min-height:100%; display:flex; flex-direction:column;}
+
+  /* Header */
+  .topbar{
+    position:sticky; top:0; z-index:20;
+    background:var(--bg); border-bottom:1px solid var(--hair);
+    padding:14px 18px; display:flex; align-items:center; gap:12px;
+  }
+  .topbar .back{
+    background:none; border:none; color:var(--text-dim); font-size:22px; line-height:1;
+    padding:4px 8px 4px 0; cursor:pointer;
+  }
+  .topbar .titles{flex:1; min-width:0;}
+  .topbar h1{margin:0; font-size:20px; font-weight:600; letter-spacing:0.03em;}
+  .topbar .sub{font-size:11px; color:var(--text-faint); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .topbar .action{
+    background:none; border:1px solid var(--hair); color:var(--text);
+    border-radius:8px; padding:8px 12px; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .topbar .action.accent{border-color:var(--accent); color:var(--accent);}
+
+  .brand{display:flex; align-items:center; gap:8px;}
+  .brand .mark{
+    width:36px; height:28px; border-radius:5px; background:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Archivo',sans-serif; font-weight:800; color:#EDE8DE; font-size:12px; letter-spacing:0.02em;
+  }
+
+  main{flex:1; padding:16px 18px 120px;}
+
+  /* Empty state */
+  .empty{
+    margin-top:60px; text-align:center; color:var(--text-faint);
+  }
+  .empty .stamp-hole{
+    width:44px; height:44px; margin:0 auto 16px; border:2px dashed var(--hair); border-radius:50%;
+  }
+  .empty p{font-size:14px; line-height:1.5; max-width:280px; margin:0 auto;}
+
+  /* Project cards */
+  .project-card{
+    background:var(--surface); border:1px solid var(--hair); border-radius:var(--radius);
+    padding:16px; margin-bottom:12px; cursor:pointer; position:relative;
+  }
+  .project-card:active{background:var(--surface-2);}
+  .project-card .pname{font-size:16px; font-weight:700; margin-bottom:4px;}
+  .project-card .pmeta{font-size:11.5px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;}
+  .project-card .pstats{display:flex; gap:14px; margin-top:10px; font-size:11px; color:var(--text-dim);}
+  .project-card .pstats b{color:var(--text); font-weight:700;}
+
+  .fab{
+    position:fixed; left:0; right:0; bottom:0; z-index:30;
+    max-width:560px; margin:0 auto;
+    padding:14px 18px calc(14px + env(safe-area-inset-bottom));
+    background:linear-gradient(to top, var(--bg) 60%, transparent);
+  }
+  .btn-primary{
+    display:block; width:100%; background:var(--accent); color:#EDE8DE;
+    border:none; border-radius:12px; padding:16px; font-size:15px; font-weight:700;
+    text-transform:uppercase; letter-spacing:0.04em; cursor:pointer; font-family:'Archivo',sans-serif;
+  }
+  .btn-primary:active{opacity:0.85;}
+  .btn-secondary{
+    display:block; width:100%; background:none; color:var(--text);
+    border:1px solid var(--hair); border-radius:12px; padding:14px; font-size:13px; font-weight:600;
+    cursor:pointer; margin-top:8px;
+  }
+
+  /* Summary bar on project view */
+  .summary{display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-bottom:16px;}
+  .summary .chip{
+    flex:0 0 auto; background:var(--surface); border:1px solid var(--hair); border-radius:8px;
+    padding:8px 12px; text-align:center; min-width:64px;
+  }
+  .summary .chip .n{font-size:17px; font-weight:700; font-family:'IBM Plex Mono',monospace;}
+  .summary .chip .l{font-size:8.5px; color:var(--text-faint); letter-spacing:0.05em; margin-top:2px;}
+  .summary .chip.crit .n{color:var(--critical);}
+  .summary .chip.maj .n{color:var(--major);}
+  .summary .chip.closed .n{color:var(--closed);}
+
+  .filters{display:flex; gap:8px; margin-bottom:14px;}
+  .filters button{
+    flex:1; background:var(--surface); border:1px solid var(--hair); color:var(--text-dim);
+    padding:9px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;
+  }
+  .filters button.on{background:var(--accent-dim); border-color:var(--accent); color:var(--accent);}
+
+  /* Item / tag card */
+  .item-card{
+    background:var(--surface); border:1px solid var(--hair); border-radius:var(--radius);
+    padding:14px; margin-bottom:10px; position:relative;
+  }
+  .item-card .row1{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;}
+  .item-card .num{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-faint);}
+  .stamp{
+    font-family:'Archivo',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.08em;
+    border:1.5px solid; border-radius:4px; padding:3px 8px; transform:rotate(-2deg); display:inline-block;
+  }
+  .stamp.open{color:var(--critical); border-color:var(--critical);}
+  .stamp.closed{color:var(--closed); border-color:var(--closed);}
+  .item-card .loc{font-size:14.5px; font-weight:600; margin-bottom:4px;}
+  .item-card .tags{font-size:10.5px; color:var(--text-faint); margin-bottom:6px; letter-spacing:0.03em;}
+  .item-card .sev{font-weight:700; letter-spacing:0.05em;}
+  .sev-Critical{color:var(--critical);}
+  .sev-Major{color:var(--major);}
+  .sev-Minor{color:var(--minor);}
+  .item-card .desc{font-size:13px; color:var(--text-dim); line-height:1.45; margin-bottom:8px; white-space:pre-wrap;}
+  .item-card .photos{display:flex; gap:6px; flex-wrap:wrap;}
+  .item-card .photos img{width:64px; height:64px; object-fit:cover; border-radius:6px; border:1px solid var(--hair);}
+  .item-card .foot{display:flex; justify-content:space-between; align-items:center; margin-top:8px;}
+  .item-card .time{font-size:10px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;}
+  .item-card .edit-link{font-size:11px; color:var(--accent); background:none; border:none; font-weight:600; cursor:pointer;}
+
+  /* Form */
+  .field{margin-bottom:18px;}
+  .field label{display:block; font-size:11px; font-weight:700; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;}
+  .field input[type=text], .field textarea, .field input[type=date]{
+    width:100%; background:var(--surface); border:1px solid var(--hair); color:var(--text);
+    border-radius:8px; padding:12px 14px; font-size:15px; font-family:'Inter',sans-serif;
+  }
+  .field input[type=text]:focus, .field textarea:focus{outline:2px solid var(--accent); outline-offset:1px;}
+  .field textarea{min-height:110px; resize:vertical; line-height:1.5;}
+  .hint{font-size:11px; color:var(--text-faint); margin-top:6px;}
+  .pillrow{display:flex; gap:8px; flex-wrap:wrap;}
+  .pill{
+    background:var(--surface); border:1px solid var(--hair); color:var(--text-dim);
+    padding:9px 14px; border-radius:20px; font-size:12.5px; font-weight:600; cursor:pointer;
+  }
+  .pill.on{background:var(--accent); border-color:var(--accent); color:#FFFFFF;}
+  .pill.sev-crit.on{background:var(--critical); border-color:var(--critical); color:#fff;}
+  .pill.sev-maj.on{background:var(--major); border-color:var(--major); color:#FFFFFF;}
+  .pill.sev-min.on{background:var(--minor); border-color:var(--minor); color:#FFFFFF;}
+
+  .photo-grid{display:flex; gap:10px; flex-wrap:wrap;}
+  .photo-thumb{position:relative; width:84px; height:84px; border-radius:8px; overflow:hidden; border:1px solid var(--hair);}
+  .photo-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .photo-thumb .rm{
+    position:absolute; top:2px; right:2px; background:rgba(20,20,20,0.75); color:#fff; border:none;
+    width:20px; height:20px; border-radius:50%; font-size:12px; line-height:1; cursor:pointer;
+  }
+  .add-photo{
+    width:84px; height:84px; border-radius:8px; border:1.5px dashed var(--hair); background:none;
+    color:var(--text-faint); display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:4px; font-size:10px; cursor:pointer; text-transform:uppercase; letter-spacing:0.04em;
+  }
+  .add-photo svg{width:20px; height:20px;}
+
+  .status-toggle{display:flex; border:1px solid var(--hair); border-radius:8px; overflow:hidden;}
+  .status-toggle button{flex:1; background:var(--surface); border:none; color:var(--text-dim); padding:11px; font-size:13px; font-weight:700; cursor:pointer;}
+  .status-toggle button.on-open{background:var(--accent-dim); color:var(--critical);}
+  .status-toggle button.on-closed{background:rgba(95,174,114,0.15); color:var(--closed);}
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50;
+    display:flex; align-items:flex-end; justify-content:center;
+  }
+  .modal-sheet{
+    background:var(--bg); width:100%; max-width:560px; border-radius:16px 16px 0 0;
+    padding:22px 18px calc(22px + env(safe-area-inset-bottom)); border-top:1px solid var(--hair);
+    max-height:85vh; overflow-y:auto;
+  }
+  .modal-sheet h2{margin:0 0 16px; font-size:17px;}
+
+  .toast{
+    position:fixed; bottom:100px; left:50%; transform:translateX(-50%); z-index:60;
+    background:var(--surface-2); border:1px solid var(--hair); color:var(--text);
+    padding:10px 18px; border-radius:20px; font-size:13px; box-shadow:0 6px 20px rgba(0,0,0,0.4);
+  }
+
+  .rec-btn{
+    position:absolute; right:8px; bottom:8px; width:34px; height:34px; border-radius:50%;
+    background:var(--accent); border:none; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .rec-btn.listening{background:var(--critical); animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(224,82,82,0.5);}70%{box-shadow:0 0 0 10px rgba(224,82,82,0);}100%{box-shadow:0 0 0 0 rgba(224,82,82,0);}}
+  .textarea-wrap{position:relative;}
+
+  ::-webkit-scrollbar{display:none;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+  const STORAGE = {
+    projects: 'projects',
+    itemIndex: (pid) => `items-index:${pid}`,
+    item: (pid, iid) => `item:${pid}:${iid}`,
+  };
+
+  const CATEGORIES = ['Space Frame','AirCells','Fascia & Doors','Flooring','Inflation System','Power & Electrics','Anchorage & Levelling','Vinyl & Branding','Site Equipment & Safety','Other'];
+  const STRUCTURE_SYSTEMS = ['EXPRO','EXPRESS','XTRL','XPLAY','Other'];
+  const SEVERITIES = ['Critical','Major','Minor'];
+
+  let state = {
+    view: 'projects', // projects | project | form
+    projects: [],
+    currentProjectId: null,
+    items: [],
+    filter: 'all',
+    editingItem: null,
+    modal: null, // 'edit-project' | null
+  };
+
+  const app = document.getElementById('app');
+  const uid = () => 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+
+  // --- Local device storage (IndexedDB) ---
+  // Works standalone on the Home Screen / offline, unlike Claude's window.storage
+  // bridge which only exists while this page is embedded in Claude.ai itself.
+  const DB_NAME = 'fabric-db';
+  const DB_STORE = 'kv';
+  let dbPromise = null;
+  function openDB(){
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject)=>{
+      if (!('indexedDB' in window)){ reject(new Error('IndexedDB unavailable')); return; }
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = (e)=>{
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+      };
+      req.onsuccess = ()=> resolve(req.result);
+      req.onerror = ()=> reject(req.error);
+    });
+    return dbPromise;
+  }
+  function idbGet(key){
+    return openDB().then(db => new Promise((resolve, reject)=>{
+      const tx = db.transaction(DB_STORE, 'readonly');
+      const req = tx.objectStore(DB_STORE).get(key);
+      req.onsuccess = ()=> resolve(req.result === undefined ? null : req.result);
+      req.onerror = ()=> reject(req.error);
+    }));
+  }
+  function idbSet(key, value){
+    return openDB().then(db => new Promise((resolve, reject)=>{
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).put(value, key);
+      tx.oncomplete = ()=> resolve(true);
+      tx.onerror = ()=> reject(tx.error);
+    }));
+  }
+  function idbDelete(key){
+    return openDB().then(db => new Promise((resolve, reject)=>{
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).delete(key);
+      tx.oncomplete = ()=> resolve(true);
+      tx.onerror = ()=> reject(tx.error);
+    }));
+  }
+
+  async function safeGet(key){
+    try { return await idbGet(key); }
+    catch(e){ console.error('storage get failed', key, e); return null; }
+  }
+  async function safeSet(key, val){
+    try { await idbSet(key, val); return true; }
+    catch(e){ console.error('storage set failed', key, e); showToast('Could not save — storage error'); return false; }
+  }
+  async function safeDelete(key){
+    try { await idbDelete(key); } catch(e){ console.error('storage delete failed', key, e); }
+  }
+
+  async function loadProjects(){
+    const v = await safeGet(STORAGE.projects);
+    state.projects = v ? JSON.parse(v) : [];
+  }
+  async function saveProjects(){
+    await safeSet(STORAGE.projects, JSON.stringify(state.projects));
+  }
+  async function loadItems(pid){
+    const v = await safeGet(STORAGE.itemIndex(pid));
+    const ids = v ? JSON.parse(v) : [];
+    const items = [];
+    for (const id of ids){
+      const raw = await safeGet(STORAGE.item(pid, id));
+      if (raw) { try { items.push(JSON.parse(raw)); } catch(e){} }
+    }
+    items.sort((a,b)=> a.number - b.number);
+    state.items = items;
+  }
+  async function persistItem(pid, item){
+    await safeSet(STORAGE.item(pid, item.id), JSON.stringify(item));
+  }
+  async function addToIndex(pid, id){
+    const v = await safeGet(STORAGE.itemIndex(pid));
+    const ids = v ? JSON.parse(v) : [];
+    if (!ids.includes(id)) ids.push(id);
+    await safeSet(STORAGE.itemIndex(pid), JSON.stringify(ids));
+  }
+  async function removeFromIndex(pid, id){
+    const v = await safeGet(STORAGE.itemIndex(pid));
+    let ids = v ? JSON.parse(v) : [];
+    ids = ids.filter(x=>x!==id);
+    await safeSet(STORAGE.itemIndex(pid), JSON.stringify(ids));
+    await safeDelete(STORAGE.item(pid, id));
+  }
+
+  function currentProject(){
+    return state.projects.find(p=>p.id===state.currentProjectId);
+  }
+
+  function showToast(msg){
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(), 2200);
+  }
+
+  function esc(s){
+    return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---------- RENDER ----------
+  function render(){
+    if (state.view === 'projects') renderProjects();
+    else if (state.view === 'project') renderProject();
+    else if (state.view === 'form') renderForm();
+  }
+
+  function renderProjects(){
+    const list = state.projects.slice().sort((a,b)=> (b.updatedAt||0)-(a.updatedAt||0));
+    app.innerHTML = `
+      <div class="topbar">
+        <div class="brand"><div class="mark">(x)</div>
+          <div class="titles">
+            <h1 class="display">Fabric</h1>
+            <div class="sub">Airclad structure handover &amp; snagging</div>
+          </div>
+        </div>
+      </div>
+      <main>
+        ${list.length === 0 ? `
+          <div class="empty">
+            <div class="stamp-hole"></div>
+            <p>No projects yet. Start one to begin logging handover issues and snags on your airclad structure.</p>
+          </div>
+        ` : list.map(p => `
+          <div class="project-card" data-id="${p.id}">
+            <div class="pname">${esc(p.name || 'Untitled project')}</div>
+            <div class="pmeta">${p.system ? esc(p.system) + (p.model ? ' · ' + esc(p.model) : '') + ' · ' : ''}${esc(p.address || 'No address')} ${p.date ? '· ' + esc(p.date) : ''}</div>
+            <div class="pstats">
+              <span><b>${p.itemCount||0}</b> issues</span>
+              <span><b>${p.openCount||0}</b> open</span>
+            </div>
+          </div>
+        `).join('')}
+      </main>
+      <div class="fab">
+        <button class="btn-primary" id="btn-new-project">+ New Project</button>
+      </div>
+    `;
+    app.querySelectorAll('.project-card').forEach(el=>{
+      el.addEventListener('click', async ()=>{
+        state.currentProjectId = el.dataset.id;
+        state.filter = 'all';
+        await loadItems(state.currentProjectId);
+        state.view = 'project';
+        render();
+      });
+    });
+    document.getElementById('btn-new-project').addEventListener('click', openNewProjectModal);
+  }
+
+  function openNewProjectModal(){
+    renderProjectModal({ id:null, name:'', address:'', inspector:'', date: new Date().toISOString().slice(0,10), type:'Airclad Structure Handover', system:'EXPRO', model:'' });
+  }
+
+  function renderProjectModal(proj){
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-sheet">
+        <h2 class="display">${proj.id ? 'Edit Project' : 'New Project'}</h2>
+        <div class="field"><label>Project / Site Name</label>
+          <input type="text" id="m-name" value="${esc(proj.name)}" placeholder="e.g. Airhall 3, Riverside Depot">
+        </div>
+        <div class="field"><label>Address</label>
+          <input type="text" id="m-address" value="${esc(proj.address)}" placeholder="Site address">
+        </div>
+        <div class="field"><label>Report Type</label>
+          <div class="pillrow">
+            ${['Airclad Structure Handover','Pre-Erection Check','Snagging List','Periodic Inspection','De-Rig Inspection'].map(t=>`<button type="button" class="pill ${proj.type===t?'on':''}" data-type="${t}">${t}</button>`).join('')}
+          </div>
+        </div>
+        <div class="field"><label>Structure System</label>
+          <div class="pillrow">
+            ${STRUCTURE_SYSTEMS.map(s=>`<button type="button" class="pill ${proj.system===s?'on':''}" data-sys="${s}">${s}</button>`).join('')}
+          </div>
+        </div>
+        <div class="field"><label>Model / Reference (e.g. XPO10 DH4, YUMI)</label>
+          <input type="text" id="m-model" value="${esc(proj.model)}" placeholder="e.g. XPO10, XIP20, XTRL 6m">
+        </div>
+        <div class="field"><label>Inspector</label>
+          <input type="text" id="m-inspector" value="${esc(proj.inspector)}" placeholder="Your name">
+        </div>
+        <div class="field"><label>Date</label>
+          <input type="date" id="m-date" value="${esc(proj.date)}">
+        </div>
+        <button class="btn-primary" id="m-save">Save Project</button>
+        ${proj.id ? '<button class="btn-secondary" id="m-delete" style="color:#e05252;">Delete Project</button>' : ''}
+        <button class="btn-secondary" id="m-cancel">Cancel</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    let selType = proj.type;
+    let selSystem = proj.system || 'EXPRO';
+    overlay.querySelectorAll('[data-type]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        selType = b.dataset.type;
+        overlay.querySelectorAll('[data-type]').forEach(x=>x.classList.toggle('on', x===b));
+      });
+    });
+    overlay.querySelectorAll('[data-sys]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        selSystem = b.dataset.sys;
+        overlay.querySelectorAll('[data-sys]').forEach(x=>x.classList.toggle('on', x===b));
+      });
+    });
+    overlay.querySelector('#m-cancel').addEventListener('click', ()=> overlay.remove());
+    overlay.addEventListener('click', (e)=>{ if (e.target===overlay) overlay.remove(); });
+
+    if (proj.id){
+      overlay.querySelector('#m-delete').addEventListener('click', async ()=>{
+        if (!confirm('Delete this project and all its issues? This cannot be undone.')) return;
+        const v = await safeGet(STORAGE.itemIndex(proj.id));
+        const ids = v ? JSON.parse(v) : [];
+        for (const id of ids) await safeDelete(STORAGE.item(proj.id, id));
+        await safeDelete(STORAGE.itemIndex(proj.id));
+        state.projects = state.projects.filter(p=>p.id!==proj.id);
+        await saveProjects();
+        overlay.remove();
+        state.view = 'projects';
+        render();
+      });
+    }
+
+    overlay.querySelector('#m-save').addEventListener('click', async ()=>{
+      const name = document.getElementById('m-name').value.trim();
+      if (!name){ showToast('Give the project a name'); return; }
+      const data = {
+        id: proj.id || uid(),
+        name,
+        address: document.getElementById('m-address').value.trim(),
+        inspector: document.getElementById('m-inspector').value.trim(),
+        date: document.getElementById('m-date').value,
+        type: selType,
+        system: selSystem,
+        model: document.getElementById('m-model').value.trim(),
+        itemCount: proj.itemCount || 0,
+        openCount: proj.openCount || 0,
+        updatedAt: Date.now(),
+        createdAt: proj.createdAt || Date.now(),
+      };
+      const idx = state.projects.findIndex(p=>p.id===data.id);
+      if (idx>=0) state.projects[idx] = data; else state.projects.push(data);
+      await saveProjects();
+      overlay.remove();
+      if (!proj.id){
+        state.currentProjectId = data.id;
+        state.items = [];
+        state.view = 'project';
+      } else if (state.currentProjectId === data.id) {
+        state.view = state.view;
+      }
+      render();
+    });
+  }
+
+  function updateProjectStats(){
+    const p = currentProject();
+    if (!p) return;
+    p.itemCount = state.items.length;
+    p.openCount = state.items.filter(i=>i.status==='open').length;
+    p.updatedAt = Date.now();
+    saveProjects();
+  }
+
+  function renderProject(){
+    const p = currentProject();
+    if (!p){ state.view='projects'; render(); return; }
+    const total = state.items.length;
+    const open = state.items.filter(i=>i.status==='open').length;
+    const closed = total - open;
+    const crit = state.items.filter(i=>i.severity==='Critical').length;
+    const maj = state.items.filter(i=>i.severity==='Major').length;
+
+    let filtered = state.items;
+    if (state.filter==='open') filtered = state.items.filter(i=>i.status==='open');
+    if (state.filter==='closed') filtered = state.items.filter(i=>i.status==='closed');
+
+    app.innerHTML = `
+      <div class="topbar">
+        <button class="back" id="btn-back">‹</button>
+        <div class="titles" id="proj-title-tap">
+          <h1 style="font-size:16px;">${esc(p.name)}</h1>
+          <div class="sub">${p.system ? esc(p.system) + (p.model ? ' '+esc(p.model) : '') + ' · ' : ''}${esc(p.address||'')}</div>
+        </div>
+        <button class="action" id="btn-edit-proj">Edit</button>
+      </div>
+      <main>
+        <div class="summary">
+          <div class="chip"><div class="n mono">${total}</div><div class="l">TOTAL</div></div>
+          <div class="chip"><div class="n mono" style="color:var(--critical)">${open}</div><div class="l">OPEN</div></div>
+          <div class="chip closed"><div class="n mono">${closed}</div><div class="l">CLOSED</div></div>
+          <div class="chip crit"><div class="n mono">${crit}</div><div class="l">CRITICAL</div></div>
+          <div class="chip maj"><div class="n mono">${maj}</div><div class="l">MAJOR</div></div>
+        </div>
+        <div class="filters">
+          <button data-f="all" class="${state.filter==='all'?'on':''}">All</button>
+          <button data-f="open" class="${state.filter==='open'?'on':''}">Open</button>
+          <button data-f="closed" class="${state.filter==='closed'?'on':''}">Closed</button>
+        </div>
+        ${filtered.length===0 ? `
+          <div class="empty">
+            <div class="stamp-hole"></div>
+            <p>No issues logged${state.filter!=='all' ? ' in this view' : ' yet'}. Tap "Add Issue" to dictate your first snag.</p>
+          </div>
+        ` : filtered.slice().reverse().map(item => `
+          <div class="item-card" data-id="${item.id}">
+            <div class="row1">
+              <span class="num mono">#${String(item.number).padStart(3,'0')}</span>
+              <span class="stamp ${item.status}">${item.status==='closed'?'CLOSED':'OPEN'}</span>
+            </div>
+            <div class="loc">${esc(item.location||'Unspecified location')}</div>
+            <div class="tags"><span class="sev sev-${item.severity}">${item.severity?item.severity.toUpperCase():''}</span> · ${esc(item.category||'')}</div>
+            ${item.description ? `<div class="desc">${esc(item.description)}</div>` : ''}
+            ${item.photos && item.photos.length ? `<div class="photos">${item.photos.map(ph=>`<img src="${ph.dataUrl}">`).join('')}</div>` : ''}
+            <div class="foot">
+              <span class="time mono">${item.timestamp ? new Date(item.timestamp).toLocaleString() : ''}</span>
+              <button class="edit-link" data-edit="${item.id}">Edit</button>
+            </div>
+          </div>
+        `).join('')}
+        ${total>0 ? '<button class="btn-secondary" id="btn-pdf">Generate PDF Report</button>' : ''}
+      </main>
+      <div class="fab">
+        <button class="btn-primary" id="btn-add-issue">+ Add Issue</button>
+      </div>
+    `;
+    document.getElementById('btn-back').addEventListener('click', ()=>{ state.view='projects'; render(); });
+    document.getElementById('btn-edit-proj').addEventListener('click', ()=> renderProjectModal(p));
+    document.getElementById('btn-add-issue').addEventListener('click', ()=> openForm(null));
+    app.querySelectorAll('[data-f]').forEach(b=> b.addEventListener('click', ()=>{ state.filter=b.dataset.f; render(); }));
+    app.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', (e)=>{ e.stopPropagation(); openForm(b.dataset.edit); }));
+    const pdfBtn = document.getElementById('btn-pdf');
+    if (pdfBtn) pdfBtn.addEventListener('click', ()=> generateReport(p, state.items));
+  }
+
+  // ---------- FORM (add/edit issue) ----------
+  function openForm(itemId){
+    if (itemId){
+      state.editingItem = JSON.parse(JSON.stringify(state.items.find(i=>i.id===itemId)));
+    } else {
+      state.editingItem = {
+        id: uid(), location:'', category:'AirCells', severity:'Major',
+        description:'', photos:[], status:'open', timestamp: Date.now(),
+        number: (Math.max(0, ...state.items.map(i=>i.number||0)) + 1),
+      };
+    }
+    state.view = 'form';
+    render();
+  }
+
+  let recognition = null;
+  function renderForm(){
+    const it = state.editingItem;
+    const speechSupported = ('webkitSpeechRecognition' in window) || ('SpeechRecognition' in window);
+    app.innerHTML = `
+      <div class="topbar">
+        <button class="back" id="btn-cancel-form">‹</button>
+        <div class="titles"><h1 style="font-size:16px;">${it.number ? 'Issue #' + String(it.number).padStart(3,'0') : 'New Issue'}</h1></div>
+        <button class="action accent" id="btn-save-form">Save</button>
+      </div>
+      <main>
+        <div class="field">
+          <label>Location / Element</label>
+          <input type="text" id="f-location" value="${esc(it.location)}" placeholder="e.g. North fascia door, Bay 3 keder track, Fan 2">
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <div class="pillrow">
+            ${CATEGORIES.map(c=>`<button type="button" class="pill ${it.category===c?'on':''}" data-cat="${c}">${c}</button>`).join('')}
+          </div>
+        </div>
+        <div class="field">
+          <label>Severity</label>
+          <div class="pillrow">
+            <button type="button" class="pill sev-crit ${it.severity==='Critical'?'on':''}" data-sev="Critical">Critical</button>
+            <button type="button" class="pill sev-maj ${it.severity==='Major'?'on':''}" data-sev="Major">Major</button>
+            <button type="button" class="pill sev-min ${it.severity==='Minor'?'on':''}" data-sev="Minor">Minor</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Description</label>
+          <div class="textarea-wrap">
+            <textarea id="f-desc" placeholder="Describe the issue...">${esc(it.description)}</textarea>
+            ${speechSupported ? `<button type="button" class="rec-btn" id="btn-mic" title="Dictate">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EDE8DE" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            </button>` : ''}
+          </div>
+          <div class="hint">${speechSupported ? 'Tap the mic to dictate, or use the keyboard dictation button.' : 'Tap the microphone icon on your keyboard to dictate this issue.'}</div>
+        </div>
+        <div class="field">
+          <label>Photos</label>
+          <div class="photo-grid" id="photo-grid">
+            ${it.photos.map((ph,i)=>`
+              <div class="photo-thumb"><img src="${ph.dataUrl}"><button class="rm" data-rm="${i}">×</button></div>
+            `).join('')}
+            <button type="button" class="add-photo" id="btn-add-photo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              Photo
+            </button>
+            <input type="file" accept="image/*" capture="environment" id="photo-input" style="display:none;">
+          </div>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <div class="status-toggle">
+            <button type="button" id="st-open" class="${it.status==='open'?'on-open':''}">Open</button>
+            <button type="button" id="st-closed" class="${it.status==='closed'?'on-closed':''}">Closed</button>
+          </div>
+        </div>
+        ${it.id && state.items.find(x=>x.id===it.id) ? '<button class="btn-secondary" id="btn-delete-item" style="color:#e05252;">Delete Issue</button>' : ''}
+      </main>
+    `;
+
+    document.getElementById('btn-cancel-form').addEventListener('click', ()=>{ state.view='project'; render(); });
+    document.getElementById('btn-save-form').addEventListener('click', saveFormItem);
+
+    app.querySelectorAll('[data-cat]').forEach(b=> b.addEventListener('click', ()=>{
+      it.category = b.dataset.cat;
+      app.querySelectorAll('[data-cat]').forEach(x=>x.classList.toggle('on', x===b));
+    }));
+    app.querySelectorAll('[data-sev]').forEach(b=> b.addEventListener('click', ()=>{
+      it.severity = b.dataset.sev;
+      app.querySelectorAll('[data-sev]').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+    }));
+    document.getElementById('st-open').addEventListener('click', ()=>{ it.status='open'; renderStatusToggle(); });
+    document.getElementById('st-closed').addEventListener('click', ()=>{ it.status='closed'; renderStatusToggle(); });
+    function renderStatusToggle(){
+      document.getElementById('st-open').className = it.status==='open' ? 'on-open' : '';
+      document.getElementById('st-closed').className = it.status==='closed' ? 'on-closed' : '';
+    }
+
+    const descField = document.getElementById('f-desc');
+    descField.addEventListener('input', ()=>{ it.description = descField.value; });
+
+    const photoInput = document.getElementById('photo-input');
+    document.getElementById('btn-add-photo').addEventListener('click', ()=> photoInput.click());
+    photoInput.addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      if (!file) return;
+      showToast('Processing photo…');
+      try {
+        const compressed = await compressImage(file);
+        it.photos.push(compressed);
+        renderForm();
+      } catch(err){ showToast('Could not add photo'); }
+      photoInput.value = '';
+    });
+    app.querySelectorAll('[data-rm]').forEach(b=> b.addEventListener('click', ()=>{
+      it.photos.splice(parseInt(b.dataset.rm,10),1);
+      renderForm();
+    }));
+
+    const delBtn = document.getElementById('btn-delete-item');
+    if (delBtn) delBtn.addEventListener('click', async ()=>{
+      if (!confirm('Delete this issue?')) return;
+      await removeFromIndex(state.currentProjectId, it.id);
+      await loadItems(state.currentProjectId);
+      updateProjectStats();
+      state.view = 'project';
+      render();
+    });
+
+    if (speechSupported){
+      const micBtn = document.getElementById('btn-mic');
+      micBtn.addEventListener('click', ()=> toggleDictation(descField, micBtn, it));
+    }
+  }
+
+  function toggleDictation(descField, micBtn, it){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (recognition){
+      recognition.stop();
+      recognition = null;
+      micBtn.classList.remove('listening');
+      return;
+    }
+    recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = 'en-GB';
+    let baseText = descField.value;
+    recognition.onresult = (e)=>{
+      let finalTranscript = '';
+      for (let i=e.resultIndex; i<e.results.length; i++){
+        if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+      }
+      if (finalTranscript){
+        baseText = (baseText ? baseText + ' ' : '') + finalTranscript.trim();
+        descField.value = baseText;
+        it.description = baseText;
+      }
+    };
+    recognition.onerror = ()=>{ micBtn.classList.remove('listening'); recognition = null; };
+    recognition.onend = ()=>{ micBtn.classList.remove('listening'); recognition = null; };
+    recognition.start();
+    micBtn.classList.add('listening');
+  }
+
+  async function saveFormItem(){
+    const it = state.editingItem;
+    it.location = document.getElementById('f-location').value.trim();
+    it.description = document.getElementById('f-desc').value.trim();
+    if (!it.location && !it.description){
+      showToast('Add a location or description');
+      return;
+    }
+    if (!it.timestamp) it.timestamp = Date.now();
+    await persistItem(state.currentProjectId, it);
+    await addToIndex(state.currentProjectId, it.id);
+    await loadItems(state.currentProjectId);
+    updateProjectStats();
+    state.view = 'project';
+    render();
+    showToast('Issue saved');
+  }
+
+  // ---------- IMAGE COMPRESSION ----------
+  function compressImage(file){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = (e)=>{
+        const img = new Image();
+        img.onload = ()=>{
+          const maxDim = 900;
+          let w = img.width, h = img.height;
+          if (w > h && w > maxDim){ h = Math.round(h*maxDim/w); w = maxDim; }
+          else if (h >= w && h > maxDim){ w = Math.round(w*maxDim/h); h = maxDim; }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.55);
+          resolve({ dataUrl, width: w, height: h });
+        };
+        img.onerror = ()=> reject(new Error('bad image'));
+        img.src = e.target.result;
+      };
+      reader.onerror = ()=> reject(new Error('read failed'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ---------- PDF REPORT ----------
+  async function generateReport(project, items){
+    showToast('Building report…');
+    try {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit:'pt', format:'a4' });
+      const pageW = 595.28, pageH = 841.89, margin = 42;
+      let y;
+
+      // Cover band
+      doc.setFillColor(20,19,17);
+      doc.rect(0,0,pageW,168,'F');
+      doc.setTextColor(237,232,222);
+      doc.setFont('helvetica','bold'); doc.setFontSize(26);
+      doc.text('FABRIC', margin, 66);
+      doc.setFontSize(10.5); doc.setFont('helvetica','normal');
+      doc.setTextColor(237,232,222);
+      doc.text('AIRCLAD STRUCTURE HANDOVER & SNAGGING REPORT', margin, 87);
+      doc.setTextColor(160,154,142); doc.setFontSize(8.5);
+      doc.text('Generated ' + new Date().toLocaleString(), margin, 105);
+
+      y = 198;
+      doc.setTextColor(20,19,17);
+      doc.setFont('helvetica','bold'); doc.setFontSize(18);
+      doc.text(project.name || 'Untitled project', margin, y);
+      y += 20;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10);
+      doc.setTextColor(90,86,78);
+      if (project.address){ doc.text(project.address, margin, y); y += 15; }
+      const metaBits = [project.type, project.system ? ('System: ' + project.system + (project.model ? ' ('+project.model+')' : '')) : null, project.inspector ? ('Inspector: ' + project.inspector) : null, project.date ? ('Date: ' + project.date) : null].filter(Boolean).join('    ·    ');
+      if (metaBits){ doc.text(metaBits, margin, y); y += 22; }
+      else { y += 8; }
+
+      const total = items.length;
+      const open = items.filter(i=>i.status==='open').length;
+      const closed = total - open;
+      const critical = items.filter(i=>i.severity==='Critical').length;
+      const major = items.filter(i=>i.severity==='Major').length;
+      const minor = items.filter(i=>i.severity==='Minor').length;
+
+      const stats = [['TOTAL',total],['OPEN',open],['CLOSED',closed],['CRITICAL',critical],['MAJOR',major],['MINOR',minor]];
+      const gap = 8;
+      const boxW = (pageW - margin*2 - gap*5)/6;
+      stats.forEach((s,i)=>{
+        const bx = margin + i*(boxW+gap);
+        doc.setDrawColor(210,206,198);
+        doc.roundedRect(bx, y, boxW, 48, 3, 3);
+        doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(28,27,25);
+        doc.text(String(s[1]), bx+boxW/2, y+22, { align:'center' });
+        doc.setFont('helvetica','normal'); doc.setFontSize(6);
+        doc.setTextColor(120,116,108);
+        doc.text(s[0], bx+boxW/2, y+37, { align:'center' });
+      });
+      y += 70;
+      doc.setDrawColor(220,216,208);
+      doc.line(margin, y, pageW-margin, y);
+      y += 22;
+
+      const sevColor = (sev)=> sev==='Critical' ? [214,68,68] : sev==='Major' ? [201,140,20] : [150,141,20];
+
+      const sorted = items.slice().sort((a,b)=>a.number-b.number);
+      for (const item of sorted){
+        const photos = item.photos || [];
+        const descLines = doc.splitTextToSize(item.description || '(no description provided)', pageW - margin*2);
+        const photoRows = Math.ceil(photos.length/2);
+        let blockH = 56 + descLines.length*11.5 + (photoRows>0 ? photoRows*116 : 0) + 20;
+        if (y + blockH > pageH - margin){ doc.addPage(); y = margin; }
+
+        doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(28,27,25);
+        doc.text('#' + String(item.number).padStart(3,'0'), margin, y+11);
+
+        const stampText = item.status==='closed' ? 'CLOSED' : 'OPEN';
+        const sc = item.status==='closed' ? [88,163,105] : [214,68,68];
+        doc.setDrawColor(sc[0],sc[1],sc[2]); doc.setTextColor(sc[0],sc[1],sc[2]);
+        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+        const stampW = doc.getTextWidth(stampText) + 16;
+        doc.roundedRect(pageW-margin-stampW, y-2, stampW, 16, 2, 2);
+        doc.text(stampText, pageW-margin-stampW/2, y+9, { align:'center' });
+
+        y += 18;
+        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(28,27,25);
+        doc.text(item.location || 'Unspecified location', margin, y);
+        y += 13;
+
+        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+        const sevc = sevColor(item.severity);
+        doc.setTextColor(sevc[0],sevc[1],sevc[2]);
+        const sevLabel = (item.severity || '').toUpperCase();
+        doc.text(sevLabel, margin, y);
+        doc.setFont('helvetica','normal'); doc.setTextColor(130,124,112);
+        doc.text('   ' + (item.category||'') + '   ·   ' + (item.timestamp ? new Date(item.timestamp).toLocaleString() : ''), margin + doc.getTextWidth(sevLabel), y);
+        y += 14;
+
+        doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(55,52,46);
+        doc.text(descLines, margin, y);
+        y += descLines.length*11.5 + 8;
+
+        if (photos.length){
+          const pgap = 10;
+          const boxW2 = (pageW - margin*2 - pgap)/2;
+          const boxH2 = 106;
+          photos.forEach((ph, idx)=>{
+            const col = idx%2, row = Math.floor(idx/2);
+            const px = margin + col*(boxW2+pgap);
+            const py = y + row*(boxH2+10);
+            const scale = Math.min(boxW2/ph.width, boxH2/ph.height);
+            const dw = ph.width*scale, dh = ph.height*scale;
+            const dx = px + (boxW2-dw)/2, dy = py + (boxH2-dh)/2;
+            try { doc.addImage(ph.dataUrl, 'JPEG', dx, dy, dw, dh); } catch(e){}
+          });
+          y += photoRows*(boxH2+10);
+        }
+        doc.setDrawColor(232,228,220);
+        doc.line(margin, y+2, pageW-margin, y+2);
+        y += 18;
+      }
+
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i=1;i<=pageCount;i++){
+        doc.setPage(i);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8);
+        doc.setTextColor(150,146,138);
+        doc.text('FABRIC  ·  Page ' + i + ' of ' + pageCount, pageW/2, pageH-22, { align:'center' });
+      }
+
+      const safeName = (project.name || 'report').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+      doc.save(safeName + '-report.pdf');
+      showToast('Report downloaded');
+    } catch(err){
+      console.error(err);
+      showToast('Could not build report');
+    }
+  }
+
+  // ---------- INIT ----------
+  async function init(){
+    app.innerHTML = '<div style="padding:60px 20px; text-align:center; color:#726d61;">Loading…</div>';
+    await loadProjects();
+    render();
+  }
+  init();
+})();
+</script>
+</body>
+</html>
